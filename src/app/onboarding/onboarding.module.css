@@ -1,0 +1,228 @@
+.layout {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    padding: 1rem;
+    gap: 1rem;
+}
+
+.main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.card {
+    width: 100%;
+    max-width: 700px;
+    border-radius: var(--radius-3xl);
+    overflow: hidden;
+}
+
+.progressBar {
+    height: 4px;
+    background: rgba(var(--primary-rgb), 0.1);
+}
+
+.progressFill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 2rem 2rem 1rem;
+}
+
+.title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+}
+
+.subtitle {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    margin-top: 0.25rem;
+}
+
+.stepBadge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.questionArea {
+    padding: 1.5rem 2rem 2rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.aiAvatar {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-lg);
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.aiAvatar span {
+    color: #fff;
+    font-size: 22px;
+}
+
+.questionText {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    padding-top: 0.4rem;
+}
+
+.inputArea {
+    padding: 0 2rem 2rem;
+}
+
+.inputWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-xl);
+    padding: 0.25rem 0.5rem 0.25rem 1rem;
+}
+
+.inputWrapper:focus-within {
+    border-color: rgba(var(--primary-rgb), 0.3);
+}
+
+.input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    padding: 0.75rem 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.sendBtn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.sendBtn:hover {
+    opacity: 0.9;
+}
+
+.sendBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sendBtn span {
+    font-size: 18px;
+}
+
+.statusBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.75rem;
+}
+
+.statusIndicators {
+    display: flex;
+    gap: 1.25rem;
+}
+
+.statusItem {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.statusDotGreen {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+}
+
+.statusDotBlue {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+}
+
+.skipBtn {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.skipBtn:hover {
+    color: var(--text-primary);
+}
+
+.loadingContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    gap: 1rem;
+    color: var(--text-secondary);
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(var(--primary-rgb), 0.2);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
