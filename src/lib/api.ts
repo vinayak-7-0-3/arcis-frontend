@@ -184,8 +184,8 @@ export const dismissItem = (interruptId: string) =>
     });
 
 // ─── Gmail ───
-export const gmailLogin = () => request<{ url: string }>('/gmail/auth/login');
-export const gmailAuthStatus = () => request<{ authenticated: boolean }>('/gmail/auth/status');
+export const gmailLogin = () => request<{ auth_url: string }>('/gmail/auth/login');
+export const gmailAuthStatus = () => request<boolean>('/gmail/auth/status');
 export const gmailLogout = () => request('/gmail/auth/logout');
 
 // ─── Onboarding ───

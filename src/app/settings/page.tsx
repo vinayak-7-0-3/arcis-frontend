@@ -36,7 +36,7 @@ export default function SettingsPage() {
         ]);
         if (results[0].status === 'fulfilled') setAgents(results[0].value);
         if (results[1].status === 'fulfilled') setModels(results[1].value);
-        if (results[2].status === 'fulfilled') setGmailConnected((results[2].value as Record<string, boolean>).authenticated);
+        if (results[2].status === 'fulfilled') setGmailConnected(results[2].value as unknown as boolean);
         setLoading(false);
     };
 
@@ -67,7 +67,27 @@ export default function SettingsPage() {
     const handleGmailConnect = async () => {
         try {
             const res = await gmailLogin();
-            if (res.url) window.open(res.url, '_blank');
+            if (res.auth_url) {
+                const width = 500;
+                const height = 600;
+                const left = (window.innerWidth - width) / 2;
+                const top = (window.innerHeight - height) / 2;
+                const popup = window.open(
+                    res.auth_url,
+                    'Google OAuth',
+                    `width=${width},height=${height},top=${top},left=${left}`
+                );
+
+                const pollTimer = window.setInterval(async () => {
+                    if (popup?.closed) {
+                        window.clearInterval(pollTimer);
+                        try {
+                            const status = await gmailAuthStatus();
+                            setGmailConnected(status as unknown as boolean);
+                        } catch { /* ignore */ }
+                    }
+                }, 1000);
+            }
         } catch { /* ignore */ }
     };
 
@@ -171,7 +191,7 @@ export default function SettingsPage() {
                                                     onChange={(e) => handleAgentChange(name, 'model_name', e.target.value)}
                                                 >
                                                     <option value={config.model_name}>{config.model_name}</option>
-                                                    {(models[config.provider] || []).filter(m => m !== config.model_name).map(m => (
+                                                    {(Array.isArray(models[config.provider]) ? models[config.provider] : []).filter(m => m !== config.model_name).map(m => (
                                                         <option key={m} value={m}>{m}</option>
                                                     ))}
                                                 </select>
