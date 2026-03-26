@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Sidebar from '@/app/components/Sidebar';
+import NotificationBell from '@/app/components/NotificationBell';
 import { getEvents, getTodos, getReminders, getCumulativeStats, getPendingItems, getUserStatus } from '@/lib/api';
 import type { CalendarItem, AgentStats, PendingItemSchema } from '@/lib/api';
 import styles from './dashboard.module.css';
@@ -85,6 +86,7 @@ export default function DashboardPage() {
                         </p>
                     </div>
                     <div className={styles.headerActions}>
+                        <NotificationBell />
                         {/* Stats badges */}
                         <div className={`${styles.statBadge} glass-card animate-slide-left delay-100`}>
                             <span className="material-symbols-outlined" style={{ color: '#6366f1' }}>token</span>
@@ -166,8 +168,8 @@ export default function DashboardPage() {
                                                 {isDone && <span className="material-symbols-outlined">check</span>}
                                             </div>
                                             <div className={styles.taskContent}>
-                                                <h3 className={isDone ? styles.taskTextDone : ''}>{t.title as string || 'Untitled'}</h3>
-                                                {t.description && <p className={styles.taskDesc}>{t.description as string}</p>}
+                                                <h3 className={isDone ? styles.taskTextDone : ''}>{String(t.title || 'Untitled')}</h3>
+                                                {t.description && <p className={styles.taskDesc}>{String(t.description)}</p>}
                                             </div>
                                         </div>
                                     );

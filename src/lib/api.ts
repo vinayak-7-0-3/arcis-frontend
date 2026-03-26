@@ -217,3 +217,23 @@ export const onboardingStatus = () => request<OnboardingStatusResponse>('/onboar
 
 // ─── User ───
 export const getUserStatus = () => request<Record<string, unknown>>('/user/status');
+
+// ─── Notifications ───
+export interface Notification {
+    id: string; // The backend uses _id as id
+    title: string;
+    message: string;
+    job_id?: string | null;
+    level: 'info' | 'success' | 'error';
+    read: boolean;
+    created_at: string;
+}
+
+export const getNotifications = (unreadOnly = false, limit = 50) =>
+    request<Notification[]>(`/notifications?unread_only=${unreadOnly}&limit=${limit}`);
+
+export const markNotificationRead = (id: string) =>
+    request(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
+
+export const markAllNotificationsRead = () =>
+    request('/notifications/read-all', { method: 'POST' });
