@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.API_URL || 'http://localhost:8000';
 
 // Disable body size limit and response timeout for long-running requests (e.g. agentic chat)
 export const maxDuration = 300; // 5 minutes — Vercel/Next.js server limit
