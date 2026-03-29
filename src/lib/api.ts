@@ -57,12 +57,33 @@ export interface CalendarItem {
     [key: string]: unknown;
 }
 
-export const getEvents = (start: string, end: string) =>
-    request<CalendarItem[]>(`/calendar/events?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
-export const getTodos = (start: string, end: string) =>
-    request<CalendarItem[]>(`/calendar/todos?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
-export const getReminders = (start: string, end: string) =>
-    request<CalendarItem[]>(`/calendar/reminders?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
+const ensureUTC = (dateStr?: string) => {
+    if (!dateStr) return dateStr;
+    let normalized = dateStr.replace(' ', 'T');
+    if (!normalized.endsWith('Z') && !normalized.match(/[+-]\d{2}:\d{2}$/)) {
+        normalized += 'Z';
+    }
+    return normalized;
+};
+
+const normalizeCalendarItem = (item: CalendarItem): CalendarItem => ({
+    ...item,
+    start_time: ensureUTC(item.start_time),
+    end_time: ensureUTC(item.end_time),
+});
+
+export const getEvents = async (start: string, end: string) => {
+    const res = await request<CalendarItem[]>(`/calendar/events?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
+    return res.map(normalizeCalendarItem);
+};
+export const getTodos = async (start: string, end: string) => {
+    const res = await request<CalendarItem[]>(`/calendar/todos?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
+    return res.map(normalizeCalendarItem);
+};
+export const getReminders = async (start: string, end: string) => {
+    const res = await request<CalendarItem[]>(`/calendar/reminders?start_time=${encodeURIComponent(start)}&end_time=${encodeURIComponent(end)}`);
+    return res.map(normalizeCalendarItem);
+};
 
 // ─── Chat ───
 export interface ChatRequest {
@@ -153,8 +174,15 @@ export interface TokenUsageRecord {
 
 export const getTokenAgents = () => request<string[]>('/token-tracker/agents');
 export const getCumulativeStats = () => request<AgentStats[]>('/token-tracker/cumulative');
-export const getAgentHistory = (name: string) =>
-    request<TokenUsageRecord[]>(`/token-tracker/agent/${encodeURIComponent(name)}`);
+const normalizeTokenUsageRecord = (r: TokenUsageRecord): TokenUsageRecord => ({
+    ...r,
+    timestamp: ensureUTC(r.timestamp) || r.timestamp,
+});
+
+export const getAgentHistory = async (name: string) => {
+    const res = await request<TokenUsageRecord[]>(`/token-tracker/agent/${encodeURIComponent(name)}`);
+    return res.map(normalizeTokenUsageRecord);
+};
 
 // ─── Auto Flow ───
 export interface PendingItemSchema {
@@ -218,7 +246,13 @@ export const onboardingRespond = (sessionId: string, answer: string) =>
         method: 'POST',
         body: JSON.stringify({ session_id: sessionId, answer }),
     });
-export const onboardingStatus = () => request<OnboardingStatusResponse>('/onboarding/status');
+export const onboardingStatus = async () => {
+    const res = await request<OnboardingStatusResponse>('/onboarding/status');
+    return {
+        ...res,
+        completed_at: ensureUTC(res.completed_at) || res.completed_at,
+    };
+};
 
 // ─── User ───
 export const getUserStatus = () => request<Record<string, unknown>>('/user/status');
@@ -239,6 +273,7 @@ type RawNotification = Omit<Notification, 'id'> & { _id?: string; id?: string };
 const normalizeNotification = (n: RawNotification): Notification => ({
     ...n,
     id: (n._id ?? n.id ?? '') as string,
+    created_at: ensureUTC(n.created_at) || n.created_at,
 });
 
 export const getNotifications = async (unreadOnly = false, limit = 50): Promise<Notification[]> => {
@@ -271,8 +306,15 @@ export interface RefreshRecommendationsResponse {
     message: string;
 }
 
-export const getRecommendations = (limit = 10) =>
-    request<RecommendationCard[]>(`/dashboard/recommendations?limit=${limit}`);
+const normalizeRecommendation = (rec: RecommendationCard): RecommendationCard => ({
+    ...rec,
+    generated_at: ensureUTC(rec.generated_at) || rec.generated_at,
+});
+
+export const getRecommendations = async (limit = 10) => {
+    const res = await request<RecommendationCard[]>(`/dashboard/recommendations?limit=${limit}`);
+    return res.map(normalizeRecommendation);
+};
 
 export const refreshRecommendations = () =>
     request<RefreshRecommendationsResponse>('/dashboard/recommendations/refresh', { method: 'POST' });
