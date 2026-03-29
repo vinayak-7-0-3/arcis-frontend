@@ -24,6 +24,7 @@ export default function NotificationBell() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
     const popoverRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
@@ -57,15 +58,17 @@ export default function NotificationBell() {
     }, [isOpen]);
 
     const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
-        if (e) {
-            e.stopPropagation();
-        }
+        if (e) e.stopPropagation();
         try {
             await markNotificationRead(id);
-            setNotifications(prev => 
-                prev.map(n => n.id === id ? { ...n, read: true } : n)
-            );
+            // Start disintegration animation
+            setRemovingIds(prev => new Set(prev).add(id));
             setUnreadCount(prev => Math.max(0, prev - 1));
+            // Remove from list after animation completes (0.55s disintegrate + 0.25s collapse)
+            setTimeout(() => {
+                setNotifications(prev => prev.filter(n => n.id !== id));
+                setRemovingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+            }, 800);
         } catch (error) {
             console.error('Failed to mark notification as read:', error);
         }
@@ -74,8 +77,14 @@ export default function NotificationBell() {
     const handleMarkAllAsRead = async () => {
         try {
             await markAllNotificationsRead();
-            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+            // Animate all unread out
+            const unreadIds = new Set(notifications.filter(n => !n.read).map(n => n.id));
+            setRemovingIds(unreadIds);
             setUnreadCount(0);
+            setTimeout(() => {
+                setNotifications(prev => prev.filter(n => n.read));
+                setRemovingIds(new Set());
+            }, 800);
         } catch (error) {
             console.error('Failed to mark all as read:', error);
         }
@@ -124,10 +133,10 @@ export default function NotificationBell() {
                                 <p>No notifications yet</p>
                             </div>
                         ) : (
-                            notifications.map(notification => (
+                            notifications.map((notification, index) => (
                                 <div 
-                                    key={notification.id} 
-                                    className={`${styles.notificationItem} ${!notification.read ? styles.unread : ''} ${notification.job_id ? styles.clickable : ''}`}
+                                    key={notification.id ?? index} 
+                                    className={`${styles.notificationItem} ${!notification.read ? styles.unread : ''} ${notification.job_id ? styles.clickable : ''} ${removingIds.has(notification.id) ? styles.removing : ''}`}
                                     onClick={() => handleNotificationClick(notification)}
                                 >
                                     <div className={`${styles.iconContainer} ${styles[notification.level]}`}>

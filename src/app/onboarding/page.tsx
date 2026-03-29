@@ -1,159 +1,196 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { onboardingStart, onboardingRespond, onboardingStatus } from '@/lib/api';
-import Sidebar from '@/app/components/Sidebar';
 import styles from './onboarding.module.css';
+import { onboardingStart, onboardingRespond, onboardingStatus } from '@/lib/api';
+
+interface ChatMessage {
+    id: string;
+    type: 'ai' | 'human';
+    content: string;
+}
 
 export default function OnboardingPage() {
     const router = useRouter();
-    const [sessionId, setSessionId] = useState('');
-    const [question, setQuestion] = useState('');
-    const [answer, setAnswer] = useState('');
-    const [step, setStep] = useState(1);
-    const [totalSteps] = useState(6);
-    const [loading, setLoading] = useState(false);
-    const [initialLoading, setInitialLoading] = useState(true);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [isComplete, setIsComplete] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        checkOnboardingStatus();
+        checkStatus();
     }, []);
 
-    const checkOnboardingStatus = async () => {
+    useEffect(() => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages, loading]);
+
+    const checkStatus = async () => {
         try {
             const status = await onboardingStatus();
             if (status.onboarded) {
+                // Already completed, redirect to dashboard
                 router.push('/dashboard');
                 return;
             }
-            if (status.in_progress && status.session_id) {
-                setSessionId(status.session_id);
-                setQuestion('Continuing your onboarding session...');
-            } else {
-                const res = await onboardingStart();
-                setSessionId(res.session_id);
-                setQuestion(res.question);
-            }
-        } catch {
-            // If status check fails, start fresh
-            try {
-                const res = await onboardingStart();
-                setSessionId(res.session_id);
-                setQuestion(res.question);
-            } catch {
-                setQuestion('Welcome! Let\'s get started. Tell me about yourself.');
-            }
-        } finally {
-            setInitialLoading(false);
+            startSession();
+        } catch (error) {
+            console.error('Failed to check onboarding status', error);
+            startSession(); // Fallback to start
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!answer.trim()) return;
-        setLoading(true);
+    const startSession = async () => {
         try {
-            const res = await onboardingRespond(sessionId, answer);
-            setAnswer('');
-            setStep(prev => prev + 1);
+            const res = await onboardingStart();
+            setSessionId(res.session_id);
+            setIsComplete(res.is_complete);
+            setMessages([{
+                id: Date.now().toString(),
+                type: 'ai',
+                content: res.question
+            }]);
+            
             if (res.is_complete) {
-                router.push('/dashboard');
-            } else {
-                setQuestion(res.question);
+                completeOnboarding();
             }
-        } catch {
-            // Continue anyway
+        } catch (error) {
+            console.error('Failed to start onboarding', error);
+            setMessages([{
+                id: 'err',
+                type: 'ai',
+                content: 'Sorry, I am having trouble starting the onboarding process right now.'
+            }]);
         } finally {
             setLoading(false);
         }
     };
 
-    const progressPercent = ((step - 1) / totalSteps) * 100;
+    const handleSend = async () => {
+        if (!input.trim() || loading || !sessionId) return;
+        
+        const answer = input.trim();
+        setInput('');
+        setMessages(prev => [...prev, { id: Date.now().toString(), type: 'human', content: answer }]);
+        setLoading(true);
 
-    if (initialLoading) {
-        return (
-            <div className={styles.layout}>
-                <Sidebar />
-                <main className={styles.main}>
-                    <div className={`${styles.card} glass-card`}>
-                        <div className={styles.loadingContainer}>
-                            <div className={styles.spinner} />
-                            <p>Preparing your onboarding...</p>
-                        </div>
-                    </div>
-                </main>
-            </div>
-        );
-    }
+        try {
+            const res = await onboardingRespond(sessionId, answer);
+            setIsComplete(res.is_complete);
+            
+            // Add slight delay for more natural feel
+            setTimeout(() => {
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    type: 'ai',
+                    content: res.question
+                }]);
+                setLoading(false);
+
+                if (res.is_complete) {
+                    completeOnboarding();
+                }
+            }, 600);
+            
+        } catch (error) {
+            console.error('Failed to submit answer', error);
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                type: 'ai',
+                content: 'There was an error processing your response. Please try again.'
+            }]);
+            setLoading(false);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
+
+    const completeOnboarding = () => {
+        setIsComplete(true);
+        setTimeout(() => {
+            router.push('/dashboard');
+        }, 2000);
+    };
+
+    const handleSkip = () => {
+        router.push('/dashboard');
+    };
 
     return (
-        <div className={styles.layout}>
-            <Sidebar />
-            <main className={styles.main}>
-                <div className={`${styles.card} glass-card animate-scale-in`}>
-                    {/* Progress bar */}
-                    <div className={styles.progressBar}>
-                        <div className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
-                    </div>
+        <div className={styles.container}>
+            {/* Ambient Backgrounds from layout */}
+            
+            <button className={styles.skipButton} onClick={handleSkip}>
+                Skip Onboarding
+            </button>
 
-                    {/* Header */}
-                    <div className={styles.header}>
-                        <div>
-                            <h1 className={styles.title}>Initial Context Sync</h1>
-                            <p className={styles.subtitle}>Help ARCIS understand your needs and environment</p>
-                        </div>
-                        <span className={styles.stepBadge}>Step {step} of {totalSteps}</span>
-                    </div>
-
-                    {/* Question */}
-                    <div className={styles.questionArea}>
-                        <div className={styles.aiAvatar}>
-                            <span className="material-symbols-outlined">smart_toy</span>
-                        </div>
-                        <p className={styles.questionText}>{question}</p>
-                    </div>
-
-                    {/* Input */}
-                    <form onSubmit={handleSubmit} className={styles.inputArea}>
-                        <div className={styles.inputWrapper}>
-                            <input
-                                type="text"
-                                placeholder="Type your response here..."
-                                value={answer}
-                                onChange={(e) => setAnswer(e.target.value)}
-                                className={styles.input}
-                                disabled={loading}
-                                autoFocus
-                            />
-                            <button type="submit" className={styles.sendBtn} disabled={loading || !answer.trim()}>
-                                <span className="material-symbols-outlined">arrow_forward</span>
-                            </button>
-                        </div>
-
-                        {/* Status */}
-                        <div className={styles.statusBar}>
-                            <div className={styles.statusIndicators}>
-                                <span className={styles.statusItem}>
-                                    <span className={styles.statusDotGreen} />
-                                    CONTEXT ENGINE LIVE
-                                </span>
-                                <span className={styles.statusItem}>
-                                    <span className={styles.statusDotBlue} />
-                                    VOICE READY
-                                </span>
-                            </div>
-                            <button
-                                type="button"
-                                className={styles.skipBtn}
-                                onClick={() => router.push('/dashboard')}
-                            >
-                                Skip this step →
-                            </button>
-                        </div>
-                    </form>
+            {isComplete ? (
+                <div className={styles.successOverlay}>
+                    <span className={`material-symbols-outlined ${styles.successIcon}`}>
+                        check_circle
+                    </span>
+                    <h1 className={styles.successText}>All Set!</h1>
                 </div>
-            </main>
+            ) : (
+                <div className={styles.chatWindow}>
+                    <div className={styles.messagesArea}>
+                        {messages.map((msg, index) => {
+                            const isOld = index < messages.length - (loading ? 0 : 1);
+                            
+                            return (
+                                <div 
+                                    key={msg.id} 
+                                    className={`${styles.message} ${msg.type === 'human' ? styles.messageSent : styles.messageReceived} ${isOld ? styles.messageOld : styles.messageCurrent}`}
+                                >
+                                    <div className={msg.type === 'human' ? styles.bubbleSent : styles.bubbleReceived}>
+                                        {msg.content}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {loading && messages.length > 0 && (
+                            <div className={`${styles.message} ${styles.messageReceived} ${styles.messageCurrent}`}>
+                                <div className={styles.typingIndicator}>
+                                    <span /><span /><span />
+                                </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className={styles.inputArea}>
+                        <div className={styles.inputGlass}>
+                            <input
+                                autoFocus
+                                type="text"
+                                className={styles.textInput}
+                                placeholder="Type your answer..."
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                disabled={loading || isComplete}
+                            />
+                            <button 
+                                className={styles.sendBtn}
+                                onClick={handleSend}
+                                disabled={!input.trim() || loading || isComplete}
+                            >
+                                <span className="material-symbols-outlined">arrow_upward</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

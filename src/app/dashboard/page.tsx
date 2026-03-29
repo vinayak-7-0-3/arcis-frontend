@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '@/app/components/Sidebar';
 import NotificationBell from '@/app/components/NotificationBell';
-import { getEvents, getTodos, getReminders, getCumulativeStats, getPendingItems, getUserStatus } from '@/lib/api';
-import type { CalendarItem, AgentStats, PendingItemSchema } from '@/lib/api';
+import { getEvents, getTodos, getReminders, getCumulativeStats, getPendingItems, getUserStatus, getRecommendations, refreshRecommendations } from '@/lib/api';
+import type { CalendarItem, AgentStats, PendingItemSchema, RecommendationCard } from '@/lib/api';
 import styles from './dashboard.module.css';
 
 function getGreeting() {
@@ -30,6 +30,9 @@ export default function DashboardPage() {
     const [pending, setPending] = useState<PendingItemSchema[]>([]);
     const [userStatus, setUserStatus] = useState<Record<string, unknown>>({});
     const [loading, setLoading] = useState(true);
+    const [recommendations, setRecommendations] = useState<RecommendationCard[]>([]);
+    const [recoRefreshing, setRecoRefreshing] = useState(false);
+    const [recoToast, setRecoToast] = useState(false);
 
     useEffect(() => {
         loadDashboard();
@@ -53,6 +56,7 @@ export default function DashboardPage() {
             getCumulativeStats(),
             getPendingItems(),
             getUserStatus(),
+            getRecommendations(10),
         ]);
 
         if (results[0].status === 'fulfilled') setEvents(results[0].value);
@@ -61,6 +65,7 @@ export default function DashboardPage() {
         if (results[3].status === 'fulfilled') setStats(results[3].value);
         if (results[4].status === 'fulfilled') setPending(results[4].value);
         if (results[5].status === 'fulfilled') setUserStatus(results[5].value);
+        if (results[6].status === 'fulfilled') setRecommendations(results[6].value);
         setLoading(false);
     };
 
@@ -70,6 +75,50 @@ export default function DashboardPage() {
     const progressPercent = todos.length > 0 ? Math.round((completedTodos / todos.length) * 100) : 0;
     const circumference = 2 * Math.PI * 58;
     const dashOffset = circumference - (circumference * progressPercent) / 100;
+
+    const handleRecoRefresh = async () => {
+        setRecoRefreshing(true);
+        try {
+            await refreshRecommendations();
+            setRecoToast(true);
+            setTimeout(() => setRecoToast(false), 3500);
+        } catch {
+            // silently fail
+        } finally {
+            setRecoRefreshing(false);
+        }
+    };
+
+    const recoCategoryClass = (cat: string) => {
+        const map: Record<string, string> = {
+            wellbeing: styles['recoCat-wellbeing'],
+            productivity: styles['recoCat-productivity'],
+            focus: styles['recoCat-focus'],
+            social: styles['recoCat-social'],
+            break: styles['recoCat-break'],
+        };
+        return map[cat] ?? '';
+    };
+
+    const priorityColor = (p: number) => {
+        if (p >= 5) return '#f43f5e';
+        if (p >= 4) return '#f59e0b';
+        if (p >= 3) return '#6366f1';
+        if (p >= 2) return '#06b6d4';
+        return '#22c55e';
+    };
+
+    const formatRelativeTime = (iso: string) => {
+        try {
+            const diff = Date.now() - new Date(iso).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'Just now';
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return `${hrs}h ago`;
+            return `${Math.floor(hrs / 24)}d ago`;
+        } catch { return ''; }
+    };
 
     return (
         <div className={styles.layout}>
@@ -169,7 +218,7 @@ export default function DashboardPage() {
                                             </div>
                                             <div className={styles.taskContent}>
                                                 <h3 className={isDone ? styles.taskTextDone : ''}>{String(t.title || 'Untitled')}</h3>
-                                                {t.description && <p className={styles.taskDesc}>{String(t.description)}</p>}
+                                                {!!t.description && <p className={styles.taskDesc}>{String(t.description)}</p>}
                                             </div>
                                         </div>
                                     );
@@ -235,6 +284,62 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
+                {/* Recommendations */}
+                <section className={`${styles.section} animate-slide-up delay-400`}>
+                    <div className={`${styles.sectionCard} glass-card`}>
+                        <div className={styles.recommendationsSectionHeader}>
+                            <div className={styles.recommendationsTitleRow}>
+                                <span className="material-symbols-outlined" style={{ color: '#a855f7' }}>auto_awesome</span>
+                                <h2 className={styles.sectionTitle}>Recommendations</h2>
+                            </div>
+                            <button
+                                className={styles.recommendationsRefreshBtn}
+                                onClick={handleRecoRefresh}
+                                disabled={recoRefreshing}
+                                title="Refresh recommendations"
+                            >
+                                <span className={`material-symbols-outlined ${recoRefreshing ? styles.recommendationsSpin : ''}`}>
+                                    refresh
+                                </span>
+                                {recoRefreshing ? 'Refreshing…' : 'Refresh'}
+                            </button>
+                        </div>
+                        <div className={`${styles.recommendationsScroll} hide-scrollbar`}>
+                            {loading ? (
+                                <div className={styles.emptyState}>Loading recommendations…</div>
+                            ) : recommendations.length === 0 ? (
+                                <div className={styles.emptyState}>No recommendations yet — click Refresh to generate some!</div>
+                            ) : (
+                                recommendations.map((rec) => {
+                                    const color = priorityColor(rec.priority);
+                                    return (
+                                        <div key={rec.id} className={`${styles.recoCard}`}>
+                                            <div className={styles.recoCardTop}>
+                                                <span className={styles.recoIcon}>{rec.icon}</span>
+                                                <div className={styles.recoPriority} title={`Priority ${rec.priority}/5`}>
+                                                    {[1, 2, 3, 4, 5].map((dot) => (
+                                                        <div
+                                                            key={dot}
+                                                            className={`${styles.recoPriorityDot} ${dot <= rec.priority ? styles.recoPriorityDotActive : ''}`}
+                                                            style={{ background: color }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <span className={`${styles.recoCategory} ${recoCategoryClass(rec.category)}`}>
+                                                {rec.category}
+                                            </span>
+                                            <p className={styles.recoTitle}>{rec.title}</p>
+                                            <p className={styles.recoBody}>{rec.body}</p>
+                                            <p className={styles.recoTime}>{formatRelativeTime(rec.generated_at)}</p>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </section>
+
                 {/* Pending Approvals */}
                 {pending.length > 0 && (
                     <section className={`${styles.section} animate-slide-up delay-500`}>
@@ -280,6 +385,11 @@ export default function DashboardPage() {
                     </section>
                 )}
             </main>
+
+            {/* Refresh toast */}
+            {recoToast && (
+                <div className={styles.recoToast}>✨ Recommendation refresh started!</div>
+            )}
         </div>
     );
 }

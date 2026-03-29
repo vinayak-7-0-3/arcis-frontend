@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Sidebar from '@/app/components/Sidebar';
+import ReactMarkdown from 'react-markdown';
 import {
-    sendChat, getAllChats, getChatHistory, sendVoiceChat,
+    sendChat, getAllChats, getChatHistory, sendVoiceChat, sendVoiceChatStream,
     type MessageSchema, type ThreadPreviewSchema
 } from '@/lib/api';
 import styles from './chat.module.css';
@@ -14,8 +15,9 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<MessageSchema[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [voiceMode, setVoiceMode] = useState(false);
+    const [chatMode, setChatMode] = useState<'text' | 'voice-text' | 'voice-stream'>('text');
     const [recording, setRecording] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -99,7 +101,11 @@ export default function ChatPage() {
             mediaRecorder.onstop = async () => {
                 stream.getTracks().forEach(t => t.stop());
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                await handleVoiceSend(audioBlob);
+                if (chatMode === 'voice-stream') {
+                    await handleVoiceStreamSend(audioBlob);
+                } else {
+                    await handleVoiceSend(audioBlob);
+                }
             };
 
             mediaRecorder.start();
@@ -129,6 +135,118 @@ export default function ChatPage() {
             setMessages(prev => [...prev, {
                 type: 'ai',
                 response: `Voice error: ${err instanceof Error ? err.message : 'Failed'}`,
+                thread_id: activeThreadId || '',
+            }]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVoiceStreamSend = async (blob: Blob) => {
+        setLoading(true);
+        setMessages(prev => [...prev, {
+            type: 'human',
+            response: '🎤 Voice message sent',
+            thread_id: activeThreadId || '',
+        }]);
+
+        try {
+            const res = await sendVoiceChatStream(blob, activeThreadId);
+            if (!res.ok) throw new Error(`Stream error: ${res.status}`);
+            
+            const threadHeader = res.headers.get('x-thread-id');
+            const newThreadId = activeThreadId || threadHeader || '';
+            if (!activeThreadId && threadHeader) {
+                setActiveThreadId(threadHeader);
+            }
+
+            if (!res.body) throw new Error('No readable stream body');
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            
+            setIsPlaying(true);
+            
+            setMessages(prev => [...prev, {
+                type: 'ai',
+                response: '',
+                thread_id: newThreadId,
+            }]);
+
+            let buffer = '';
+            let fullAudioChunks: Uint8Array[] = [];
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.startsWith('data: ')) {
+                        const dataStr = line.slice(6).trim();
+                        if (!dataStr || dataStr === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(dataStr);
+                            if (parsed.type === 'text') {
+                                const newText = parsed.text || parsed.content || parsed.response;
+                                if (newText) {
+                                    setMessages(prev => {
+                                        const newMsgs = [...prev];
+                                        const lastMsg = newMsgs[newMsgs.length - 1];
+                                        if (lastMsg && lastMsg.type === 'ai') {
+                                            newMsgs[newMsgs.length - 1] = {
+                                                ...lastMsg,
+                                                response: lastMsg.response + newText
+                                            };
+                                        }
+                                        return newMsgs;
+                                    });
+                                }
+                            } else if (parsed.type === 'audio' && parsed.data) {
+                                const binaryString = atob(parsed.data);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) {
+                                    bytes[i] = binaryString.charCodeAt(i);
+                                }
+                                fullAudioChunks.push(bytes);
+                            }
+                        } catch (e) {
+                            // ignore partial JSON
+                        }
+                    }
+                }
+            }
+
+            if (fullAudioChunks.length > 0) {
+                const totalLength = fullAudioChunks.reduce((acc, val) => acc + val.length, 0);
+                const concatenated = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const chunk of fullAudioChunks) {
+                    concatenated.set(chunk, offset);
+                    offset += chunk.length;
+                }
+                const finalBlob = new Blob([concatenated], { type: 'audio/mpeg' });
+                const url = URL.createObjectURL(finalBlob);
+                const audio = new Audio(url);
+                audio.onended = () => setIsPlaying(false);
+                audio.onerror = () => setIsPlaying(false);
+                audio.play().catch(e => {
+                    console.error("Audio playback error:", e);
+                    setIsPlaying(false);
+                });
+            } else {
+                setIsPlaying(false);
+            }
+
+            loadThreads();
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                type: 'ai',
+                response: `Voice stream error: ${err instanceof Error ? err.message : 'Failed'}`,
                 thread_id: activeThreadId || '',
             }]);
         } finally {
@@ -218,18 +336,20 @@ export default function ChatPage() {
                             <h1 className={styles.chatTitle}>ARCIS AI</h1>
                             <div className={styles.chatStatus}>
                                 <span className={styles.statusDot} />
-                                <span>{voiceMode ? 'Voice Active' : 'Online'}</span>
+                                <span>{chatMode === 'voice-text' ? 'Voice Active' : chatMode === 'voice-stream' ? 'Voice Stream' : 'Online'}</span>
                             </div>
                         </div>
                     </div>
                     <div className={styles.chatHeaderActions}>
                         <button
-                            className={`${styles.headerBtn} ${voiceMode ? styles.headerBtnActive : ''}`}
-                            onClick={() => setVoiceMode(!voiceMode)}
-                            title={voiceMode ? 'Switch to Text' : 'Switch to Voice'}
+                            className={`${styles.headerBtn} ${chatMode !== 'text' ? styles.headerBtnActive : ''}`}
+                            onClick={() => {
+                                setChatMode(prev => prev === 'text' ? 'voice-text' : prev === 'voice-text' ? 'voice-stream' : 'text');
+                            }}
+                            title={`Mode: ${chatMode === 'text' ? 'Text' : chatMode === 'voice-text' ? 'Voice -> Text' : 'Voice -> Stream'}`}
                         >
                             <span className="material-symbols-outlined">
-                                {voiceMode ? 'keyboard' : 'graphic_eq'}
+                                {chatMode === 'text' ? 'keyboard' : chatMode === 'voice-text' ? 'mic' : 'graphic_eq'}
                             </span>
                         </button>
                     </div>
@@ -266,9 +386,23 @@ export default function ChatPage() {
                                         borderBottomLeftRadius: msg.type !== 'human' ? '0.25rem' : '1rem',
                                         fontSize: '0.875rem',
                                         lineHeight: '1.6',
-                                        whiteSpace: 'pre-wrap',
                                     }}>
-                                    {msg.response}
+                                    {msg.type === 'human' ? (
+                                        <div style={{ whiteSpace: 'pre-wrap' }}>{msg.response}</div>
+                                    ) : (
+                                        <ReactMarkdown
+                                            components={{
+                                                p: ({ node, ...props }) => <p style={{ margin: 0, marginBottom: '0.5rem' }} {...props} />,
+                                                ul: ({ node, ...props }) => <ul style={{ marginTop: '0.5rem', marginBottom: '0.5rem', paddingLeft: '1.5rem', listStyleType: 'disc' }} {...props} />,
+                                                ol: ({ node, ...props }) => <ol style={{ marginTop: '0.5rem', marginBottom: '0.5rem', paddingLeft: '1.5rem', listStyleType: 'decimal' }} {...props} />,
+                                                li: ({ node, ...props }) => <li style={{ marginBottom: '0.25rem' }} {...props} />,
+                                                a: ({ node, ...props }) => <a style={{ color: '#3b82f6', textDecoration: 'underline' }} {...props} />,
+                                                strong: ({ node, ...props }) => <strong style={{ fontWeight: 600 }} {...props} />,
+                                            }}
+                                        >
+                                            {msg.response}
+                                        </ReactMarkdown>
+                                    )}
                                 </div>
                                 {msg.type === 'interrupt' && (
                                     <div className={styles.interruptBadge}>
@@ -292,7 +426,7 @@ export default function ChatPage() {
 
                 {/* Input Area */}
                 <div className={styles.inputArea}>
-                    {voiceMode ? (
+                    {chatMode !== 'text' ? (
                         /* Voice Mode */
                         <div className={styles.voiceArea}>
                             <div className={styles.waveformContainer}>
@@ -324,7 +458,7 @@ export default function ChatPage() {
                                 </span>
                             </button>
                             <p className={styles.voiceHint}>
-                                {recording ? 'Listening...' : 'Hold to speak'}
+                                {recording ? 'Listening...' : `Hold to speak (${chatMode === 'voice-stream' ? 'Stream Mode' : 'Text Mode'})`}
                             </p>
                         </div>
                     ) : (
@@ -342,8 +476,8 @@ export default function ChatPage() {
                             <div className={styles.inputActions}>
                                 <button
                                     className={styles.micToggle}
-                                    onClick={() => setVoiceMode(true)}
-                                    title="Voice mode"
+                                    onClick={() => setChatMode('voice-text')}
+                                    title="Switch to Voice mode"
                                 >
                                     <span className="material-symbols-outlined">mic</span>
                                 </button>

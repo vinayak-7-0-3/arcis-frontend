@@ -188,6 +188,11 @@ export const gmailLogin = () => request<{ auth_url: string }>('/gmail/auth/login
 export const gmailAuthStatus = () => request<boolean>('/gmail/auth/status');
 export const gmailLogout = () => request('/gmail/auth/logout');
 
+// ─── Spotify ───
+export const spotifyLogin = () => request<{ auth_url: string }>('/spotify/auth/login');
+export const spotifyAuthStatus = () => request<boolean>('/spotify/auth/status');
+export const spotifyLogout = () => request('/spotify/auth/logout');
+
 // ─── Onboarding ───
 export interface OnboardingStartResponse {
     session_id: string;
@@ -220,7 +225,7 @@ export const getUserStatus = () => request<Record<string, unknown>>('/user/statu
 
 // ─── Notifications ───
 export interface Notification {
-    id: string; // The backend uses _id as id
+    id: string; // normalized from backend's _id
     title: string;
     message: string;
     job_id?: string | null;
@@ -229,11 +234,45 @@ export interface Notification {
     created_at: string;
 }
 
-export const getNotifications = (unreadOnly = false, limit = 50) =>
-    request<Notification[]>(`/notifications?unread_only=${unreadOnly}&limit=${limit}`);
+type RawNotification = Omit<Notification, 'id'> & { _id?: string; id?: string };
+
+const normalizeNotification = (n: RawNotification): Notification => ({
+    ...n,
+    id: (n._id ?? n.id ?? '') as string,
+});
+
+export const getNotifications = async (unreadOnly = false, limit = 50): Promise<Notification[]> => {
+    const raw = await request<RawNotification[]>(`/notifications?unread_only=${unreadOnly}&limit=${limit}`);
+    return raw.map(normalizeNotification);
+};
 
 export const markNotificationRead = (id: string) =>
     request(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
 
 export const markAllNotificationsRead = () =>
     request('/notifications/read-all', { method: 'POST' });
+
+// ─── Recommendations ───
+export type RecommendationCategory = 'wellbeing' | 'productivity' | 'focus' | 'social' | 'break';
+
+export interface RecommendationCard {
+    id: string;
+    title: string;
+    body: string;
+    category: RecommendationCategory;
+    priority: number; // 1–5
+    icon: string;
+    generated_at: string;
+    user_id: string;
+}
+
+export interface RefreshRecommendationsResponse {
+    status: string;
+    message: string;
+}
+
+export const getRecommendations = (limit = 10) =>
+    request<RecommendationCard[]>(`/dashboard/recommendations?limit=${limit}`);
+
+export const refreshRecommendations = () =>
+    request<RefreshRecommendationsResponse>('/dashboard/recommendations/refresh', { method: 'POST' });

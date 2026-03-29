@@ -1,16 +1,8 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${BACKEND_URL}/:path*`,
-      },
-    ];
-  },
+  // API proxying is handled by src/app/api/[...path]/route.ts
+  // This avoids Next.js rewrite proxy timeouts on long-running agentic requests
 };
 
 export default nextConfig;

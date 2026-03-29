@@ -20,7 +20,7 @@ export default function LoginPage() {
             const res = await login({ username, password });
             // Store token in cookie
             document.cookie = `arcis-token=${res.token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-            router.push('/dashboard');
+            router.push('/onboarding');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Login failed');
         } finally {

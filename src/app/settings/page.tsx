@@ -5,6 +5,7 @@ import Sidebar from '@/app/components/Sidebar';
 import {
     getModels, getAgentConfigs, updateAgentConfigs,
     gmailAuthStatus, gmailLogin, gmailLogout,
+    spotifyAuthStatus, spotifyLogin, spotifyLogout,
     uploadVoice,
     type AgentConfigModel, type LLMProvider,
 } from '@/lib/api';
@@ -18,6 +19,7 @@ export default function SettingsPage() {
     const [agents, setAgents] = useState<Record<string, AgentConfigModel>>({});
     const [models, setModels] = useState<Record<string, string[]>>({});
     const [gmailConnected, setGmailConnected] = useState(false);
+    const [spotifyConnected, setSpotifyConnected] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
     const [voiceId, setVoiceId] = useState('');
@@ -33,10 +35,12 @@ export default function SettingsPage() {
             getAgentConfigs(),
             getModels(),
             gmailAuthStatus(),
+            spotifyAuthStatus(),
         ]);
         if (results[0].status === 'fulfilled') setAgents(results[0].value);
         if (results[1].status === 'fulfilled') setModels(results[1].value);
         if (results[2].status === 'fulfilled') setGmailConnected(results[2].value as unknown as boolean);
+        if (results[3].status === 'fulfilled') setSpotifyConnected(results[3].value as unknown as boolean);
         setLoading(false);
     };
 
@@ -95,6 +99,40 @@ export default function SettingsPage() {
         try {
             await gmailLogout();
             setGmailConnected(false);
+        } catch { /* ignore */ }
+    };
+
+    const handleSpotifyConnect = async () => {
+        try {
+            const res = await spotifyLogin();
+            if (res.auth_url) {
+                const width = 500;
+                const height = 600;
+                const left = (window.innerWidth - width) / 2;
+                const top = (window.innerHeight - height) / 2;
+                const popup = window.open(
+                    res.auth_url,
+                    'Spotify OAuth',
+                    `width=${width},height=${height},top=${top},left=${left}`
+                );
+
+                const pollTimer = window.setInterval(async () => {
+                    if (popup?.closed) {
+                        window.clearInterval(pollTimer);
+                        try {
+                            const status = await spotifyAuthStatus();
+                            setSpotifyConnected(status as unknown as boolean);
+                        } catch { /* ignore */ }
+                    }
+                }, 1000);
+            }
+        } catch { /* ignore */ }
+    };
+
+    const handleSpotifyDisconnect = async () => {
+        try {
+            await spotifyLogout();
+            setSpotifyConnected(false);
         } catch { /* ignore */ }
     };
 
@@ -250,6 +288,29 @@ export default function SettingsPage() {
                                             </button>
                                         ) : (
                                             <button className={styles.connectBtn} onClick={handleGmailConnect}>
+                                                Connect
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className={styles.oauthItem}>
+                                        <div className={styles.oauthInfo}>
+                                            <div className={styles.oauthIcon} style={{ background: 'rgba(30, 215, 96, 0.15)', color: '#1ed760' }}>
+                                                <span className="material-symbols-outlined">library_music</span>
+                                            </div>
+                                            <div>
+                                                <p className={styles.oauthName}>Spotify</p>
+                                                <p className={`${styles.oauthStatus} ${spotifyConnected ? styles.oauthConnected : ''}`}>
+                                                    <span className={styles.oauthDot} style={spotifyConnected ? { background: '#1ed760', boxShadow: '0 0 8px rgba(30,215,96,0.6)' } : {}}/>
+                                                    {spotifyConnected ? 'CONNECTED' : 'NOT CONNECTED'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {spotifyConnected ? (
+                                            <button className={styles.disconnectBtn} onClick={handleSpotifyDisconnect}>
+                                                Disconnect
+                                            </button>
+                                        ) : (
+                                            <button className={styles.connectBtn} onClick={handleSpotifyConnect}>
                                                 Connect
                                             </button>
                                         )}
