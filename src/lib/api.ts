@@ -250,7 +250,7 @@ export const onboardingStatus = async () => {
     const res = await request<OnboardingStatusResponse>('/onboarding/status');
     return {
         ...res,
-        completed_at: ensureUTC(res.completed_at) || res.completed_at,
+        completed_at: ensureUTC(res.completed_at ?? undefined) || res.completed_at,
     };
 };
 
