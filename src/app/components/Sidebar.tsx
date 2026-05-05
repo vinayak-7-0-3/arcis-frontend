@@ -9,6 +9,7 @@ const navItems = [
     { href: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
     { href: '/chat', icon: 'chat_bubble', label: 'Chat' },
     { href: '/calendar', icon: 'calendar_month', label: 'Calendar' },
+    { href: '/interrupts', icon: 'pending_actions', label: 'Interrupts' },
     { href: '/settings', icon: 'settings', label: 'Settings' },
 ];
 

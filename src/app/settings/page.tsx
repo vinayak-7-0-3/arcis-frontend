@@ -6,8 +6,8 @@ import {
     getModels, getAgentConfigs, updateAgentConfigs,
     gmailAuthStatus, gmailLogin, gmailLogout,
     spotifyAuthStatus, spotifyLogin, spotifyLogout,
-    uploadVoice,
-    type AgentConfigModel, type LLMProvider,
+    uploadVoice, getVoices, deleteVoice, setDefaultVoice,
+    type AgentConfigModel, type LLMProvider, type VoiceResponse,
 } from '@/lib/api';
 import styles from './settings.module.css';
 
@@ -24,6 +24,7 @@ export default function SettingsPage() {
     const [saveMsg, setSaveMsg] = useState('');
     const [voiceId, setVoiceId] = useState('');
     const [voiceFile, setVoiceFile] = useState<File | null>(null);
+    const [voices, setVoices] = useState<VoiceResponse[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -36,11 +37,13 @@ export default function SettingsPage() {
             getModels(),
             gmailAuthStatus(),
             spotifyAuthStatus(),
+            getVoices(),
         ]);
         if (results[0].status === 'fulfilled') setAgents(results[0].value);
         if (results[1].status === 'fulfilled') setModels(results[1].value);
         if (results[2].status === 'fulfilled') setGmailConnected(results[2].value as unknown as boolean);
         if (results[3].status === 'fulfilled') setSpotifyConnected(results[3].value as unknown as boolean);
+        if (results[4].status === 'fulfilled') setVoices(results[4].value);
         setLoading(false);
     };
 
@@ -144,8 +147,34 @@ export default function SettingsPage() {
             setVoiceId('');
             setSaveMsg('Voice uploaded successfully!');
             setTimeout(() => setSaveMsg(''), 3000);
+            
+            // Refresh voices list
+            const updatedVoices = await getVoices();
+            setVoices(updatedVoices);
         } catch {
             setSaveMsg('Voice upload failed');
+        }
+    };
+
+    const handleDeleteVoice = async (id: string) => {
+        try {
+            await deleteVoice(id);
+            setVoices(voices.filter(v => v.voice_id !== id));
+            setSaveMsg('Voice deleted successfully');
+            setTimeout(() => setSaveMsg(''), 3000);
+        } catch {
+            setSaveMsg('Failed to delete voice');
+        }
+    };
+
+    const handleSetDefaultVoice = async (id: string) => {
+        try {
+            await setDefaultVoice(id);
+            setVoices(voices.map(v => ({ ...v, is_default: v.voice_id === id })));
+            setSaveMsg('Default voice updated');
+            setTimeout(() => setSaveMsg(''), 3000);
+        } catch {
+            setSaveMsg('Failed to set default voice');
         }
     };
 
@@ -363,6 +392,73 @@ export default function SettingsPage() {
                                             <span className="material-symbols-outlined">add</span>
                                         </button>
                                     </div>
+
+                                    {voices.filter(v => v.is_builtin).length > 0 && (
+                                        <>
+                                            <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '1.5rem', marginBottom: '0.5rem' }}>Built-in Voices</h3>
+                                            <div className={styles.oauthList}>
+                                                {voices.filter(v => v.is_builtin).map(voice => (
+                                                    <div key={voice.voice_id} className={styles.oauthItem}>
+                                                        <div className={styles.oauthInfo}>
+                                                            <div className={styles.oauthIcon} style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
+                                                                <span className="material-symbols-outlined">record_voice_over</span>
+                                                            </div>
+                                                            <div>
+                                                                <p className={styles.oauthName}>{voice.name}</p>
+                                                                <p className={`${styles.oauthStatus} ${voice.is_default ? styles.oauthConnected : ''}`}>
+                                                                    <span className={styles.oauthDot} style={voice.is_default ? { background: '#22c55e', boxShadow: '0 0 8px rgba(34,197,94,0.6)' } : {}}/>
+                                                                    {voice.is_default ? 'DEFAULT' : 'AVAILABLE'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                            {!voice.is_default && (
+                                                                <button className={styles.connectBtn} onClick={() => handleSetDefaultVoice(voice.voice_id)}>
+                                                                    Set Default
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {voices.filter(v => !v.is_builtin).length > 0 && (
+                                        <>
+                                            <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginTop: '1.5rem', marginBottom: '0.5rem' }}>Custom Voices</h3>
+                                            <div className={styles.oauthList}>
+                                                {voices.filter(v => !v.is_builtin).map(voice => (
+                                                    <div key={voice.voice_id} className={styles.oauthItem}>
+                                                        <div className={styles.oauthInfo}>
+                                                            <div className={styles.oauthIcon} style={{ background: 'rgba(236, 72, 153, 0.15)', color: '#ec4899' }}>
+                                                                <span className="material-symbols-outlined">graphic_eq</span>
+                                                            </div>
+                                                            <div>
+                                                                <p className={styles.oauthName}>{voice.name}</p>
+                                                                <p className={`${styles.oauthStatus} ${voice.is_default ? styles.oauthConnected : ''}`}>
+                                                                    <span className={styles.oauthDot} style={voice.is_default ? { background: '#22c55e', boxShadow: '0 0 8px rgba(34,197,94,0.6)' } : {}}/>
+                                                                    {voice.is_default ? 'DEFAULT' : 'AVAILABLE'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                            {!voice.is_default && (
+                                                                <button className={styles.connectBtn} onClick={() => handleSetDefaultVoice(voice.voice_id)}>
+                                                                    Set Default
+                                                                </button>
+                                                            )}
+                                                            {!voice.is_default && (
+                                                                <button className={styles.disconnectBtn} onClick={() => handleDeleteVoice(voice.voice_id)}>
+                                                                    Delete
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </section>
                         )}

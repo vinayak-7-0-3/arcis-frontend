@@ -144,16 +144,32 @@ export const getAllChats = () => request<ThreadPreviewSchema[]>('/chat/all_chats
 export const getChatHistory = (threadId: string) =>
     request<MessageSchema[]>(`/chat/${encodeURIComponent(threadId)}`);
 
-export const uploadVoice = async (file: File, voiceId: string) => {
+export interface VoiceResponse {
+    voice_id: string;
+    name: string;
+    is_default: boolean;
+    is_builtin: boolean;
+    created_at: number;
+}
+
+export const getVoices = () => request<VoiceResponse[]>('/voices');
+
+export const uploadVoice = async (file: File, voiceName: string) => {
     const formData = new FormData();
+    const voiceId = voiceName.toLowerCase().replace(/[^a-z0-9]/g, '-');
     formData.append('file', file);
-    const res = await fetch(`${API_BASE}/chat/voice-upload?voice_id=${encodeURIComponent(voiceId)}`, {
+    formData.append('voice_id', voiceId || 'custom-voice');
+    formData.append('name', voiceName || 'Custom Voice');
+    const res = await fetch(`${API_BASE}/voices`, {
         method: 'POST',
         body: formData,
     });
     if (!res.ok) throw new Error(`Upload error ${res.status}`);
     return res.json();
 };
+
+export const deleteVoice = (voiceId: string) => request(`/voices/${encodeURIComponent(voiceId)}`, { method: 'DELETE' });
+export const setDefaultVoice = (voiceId: string) => request(`/voices/${encodeURIComponent(voiceId)}/default`, { method: 'PUT' });
 
 // ─── Token Tracker ───
 export interface AgentStats {
@@ -200,6 +216,13 @@ export interface ResolveResponse {
 }
 
 export const getPendingItems = () => request<PendingItemSchema[]>('/auto_flow/pending');
+export const getInterrupts = (status?: string, skip = 0, limit = 50) => {
+    let url = `/auto_flow/interrupts?skip=${skip}&limit=${limit}`;
+    if (status) url += `&status=${status}`;
+    return request<PendingItemSchema[]>(url);
+};
+export const getInterruptCount = () => request<{pending: number; total: number}>('/auto_flow/interrupts/count');
+export const getInterruptDetail = (interruptId: string) => request<PendingItemSchema>(`/auto_flow/interrupts/${encodeURIComponent(interruptId)}`);
 export const resolveItem = (interruptId: string, answer: string) =>
     request<ResolveResponse>('/auto_flow/resolve', {
         method: 'POST',
